@@ -1,5 +1,5 @@
 import streamlit as st
-from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
+from transformers import BlipProcessor, BlipForConditionalGeneration
 import torch
 from PIL import Image
 import requests
@@ -18,11 +18,13 @@ def load_model():
     Load the pre-trained image captioning model, processor, and tokenizer.
     This function is cached to avoid reloading the model on every interaction.
     """
-    model_name = "nlpconnect/vit-gpt2-image-captioning"
+    model_name = "Salesforce/blip-image-captioning-base"
     
-    model = VisionEncoderDecoderModel.from_pretrained(model_name)
-    processor = ViTImageProcessor.from_pretrained(model_name)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    from transformers import BlipProcessor, BlipForConditionalGeneration
+    
+    processor = BlipProcessor.from_pretrained(model_name)
+    model = BlipForConditionalGeneration.from_pretrained(model_name)
+    tokenizer = None  # BLIP uses processor for tokenization
     
     # Set device (CPU or GPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,27 +40,22 @@ def generate_caption(image, model, processor, tokenizer, device):
         image: PIL Image object
         model: Pre-trained vision-encoder-decoder model
         processor: Image processor
-        tokenizer: Text tokenizer
+        tokenizer: Text tokenizer (unused for BLIP)
         device: torch device (CPU or GPU)
     
     Returns:
         str: Generated caption
     """
     # Preprocess the image
-    pixel_values = processor(images=image, return_tensors="pt").pixel_values
-    pixel_values = pixel_values.to(device)
+    inputs = processor(images=image, return_tensors="pt")
+    inputs = {k: v.to(device) for k, v in inputs.items()}
     
     # Generate caption
     with torch.no_grad():
-        output_ids = model.generate(
-            pixel_values,
-            max_length=16,
-            num_beams=4,
-            early_stopping=True
-        )
+        output_ids = model.generate(**inputs, max_length=50)
     
     # Decode the generated tokens to text
-    caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    caption = processor.decode(output_ids[0], skip_special_tokens=True)
     
     return caption
 
@@ -144,7 +141,7 @@ def main():
     
     # Footer
     st.write("---")
-    st.caption("Powered by Hugging Face Transformers | Model: nlpconnect/vit-gpt2-image-captioning")
+    st.caption("Powered by Hugging Face Transformers | Model: Salesforce/blip-image-captioning-base")
 
 if __name__ == "__main__":
     main()
